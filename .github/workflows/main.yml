@@ -50,7 +50,8 @@ jobs:
         
         # Accept licenses and install required packages
         yes | sdkmanager --licenses
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2" "build-tools;34.0.0"
+        sdkmanager "system-images;android-33;google_apis;x86_64"
         sdkmanager --list | grep -i ndk
         sdkmanager "ndk;26.2.11394342" "cmake;3.22.1"
     
@@ -88,7 +89,12 @@ jobs:
         # Create necessary directories
         mkdir -p ~/.buildozer
         mkdir -p ~/android
-    
+        
+        # Verify AIDL is available
+        echo "Checking for AIDL..."
+        find $ANDROID_HOME -name "aidl*" -type f 2>/dev/null || echo "AIDL not found yet"
+        ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools directory not found"
+        
     - name: Create buildozer configuration
       run: |
         # Create local buildozer config
@@ -150,6 +156,11 @@ jobs:
         export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
+        
+        # Final AIDL check before building
+        echo "Final AIDL check..."
+        find $ANDROID_HOME -name "aidl*" -type f 2>/dev/null || echo "AIDL search completed"
+        ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools not found"
         
         # Verify buildozer.spec exists
         ls -la buildozer.spec
