@@ -1,0 +1,16 @@
+# متطلبات نظام إدارة السوبر ماركت المحسن
+# Requirements for Improved Supermarket Management System
+
+# الوحدات الأساسية مدمجة في Python
+# Basic modules are built into Python
+# - tkinter (GUI framework)
+# - sqlite3 (database)
+# - json (data handling)
+# - os (file operations)
+# - datetime (date/time operations)
+# - pathlib (path handling)
+# - logging (logging system)
+
+# ملاحظة: لا حاجة لتثبيت مكتبات إضافية
+# Note: No additional libraries need to be installed
+# النظام يعمل مع Python 3.6+ فقط
