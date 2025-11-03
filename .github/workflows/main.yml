@@ -1,11 +1,9 @@
 name: Build Android APK
-
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -71,7 +69,7 @@ jobs:
           libxrandr2 \
           libgbm1 \
           libxss1 \
-          libasound2 \
+          libasound2t64 \
           unzip
     
     - name: Set up buildozer
