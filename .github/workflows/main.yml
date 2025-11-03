@@ -1,0 +1,181 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements_android.txt
+        pip install setuptools cython
+        pip install buildozer
+    
+    - name: Install Java JDK 11
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openjdk-11-jdk
+        java -version
+        javac -version
+    
+    - name: Install Android SDK
+      run: |
+        mkdir -p android-sdk
+        cd android-sdk
+        wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip commandlinetools-linux-11076708_latest.zip
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+        
+        # Set up environment
+        export ANDROID_HOME=$PWD
+        export PATH=$PATH:$PWD/cmdline-tools/latest/bin:$PWD/platform-tools
+        echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        
+        # Accept licenses and install required packages
+        yes | sdkmanager --licenses
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+        sdkmanager --list | grep -i ndk
+        sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
+    
+    - name: Install additional system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          ccache \
+          git \
+          libncurses5 \
+          libstdc++6 \
+          libgtk-3-0 \
+          libx11-xcb1 \
+          libxcb-dri3-0 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxrandr2 \
+          libgbm1 \
+          libxss1 \
+          libasound2 \
+          unzip
+    
+    - name: Set up buildozer
+      run: |
+        # Configure environment for buildozer
+        export ANDROID_HOME=${{ env.ANDROID_HOME }}
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+        export ANDROID_SDK_ROOT=$ANDROID_HOME
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
+        
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+        
+        # Create necessary directories
+        mkdir -p ~/.buildozer
+    
+    - name: Create buildozer configuration
+      run: |
+        # Create local buildozer config if not exists
+        cat > ~/.buildozer/buildozer.spec << EOF
+        [app]
+        
+        # (str) Title of your application
+        title = نظام السوبر ماركت
+        
+        # (str) Package name
+        package.name = supermarket
+        
+        # (str) Package domain (needed for android/ios packaging)
+        package.domain = com.supermarket
+        
+        # (str) Source code where the main.py live
+        source.dir = .
+        
+        # (list) Source files to include (let empty to include all the files)
+        source.include_exts = py,png,jpg,kv,atlas,wav,ttf
+        
+        # (str) Application versioning (method 1)
+        version = 1.0.0
+        
+        # (list) Application requirements
+        requirements = python3,kivy==2.3.1,kivymd==1.2.0,pillow,sqlite3
+        
+        # (str) Presplash of the application
+        #presplash.filename = %(source.dir)s/data/presplash.png
+        
+        # (str) Icon of the application
+        #icon.filename = %(source.dir)s/data/icon.png
+        
+        # (str) Supported orientation (landscape, portrait, all or unset)
+        orientation = portrait
+        
+        [buildozer]
+        
+        # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
+        log_level = 2
+        
+        # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+        warn_on_root = 1
+        
+        # (str) Path to build artifact storage, absolute or relative to spec file
+        #build_dir = ./.buildozer
+        
+        # (str) Path to build output i.e. .apk, .ipa files storage.
+        #bin_dir = ./bin
+        
+        EOF
+    
+    - name: Build Android APK
+      run: |
+        export ANDROID_HOME=${{ env.ANDROID_HOME }}
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+        export ANDROID_SDK_ROOT=$ANDROID_HOME
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
+        
+        # Create android directory with proper structure
+        mkdir -p android
+        
+        # Copy buildozer.spec
+        cp buildozer.spec android/
+        
+        # Copy source files
+        cp main.py android/
+        cp android_supermarket_app.py android/
+        cp main_android_app.py android/
+        
+        # Build the APK
+        cd android
+        buildozer android debug
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: android/bin/*.apk
+        retention-days: 30
+    
+    - name: Display build information
+      if: always()
+      run: |
+        echo "Build completed!"
+        ls -la android/bin/ || echo "No bin directory found"
+        if [ -f "android/bin/"*.apk ]; then
+          echo "APK files created:"
+          ls -lah android/bin/*.apk
+        fi
