@@ -33,7 +33,7 @@ jobs:
         java -version
         javac -version
     
-    - name: Install Android SDK with BUILDTOOLS FALLBACK
+    - name: Install Android SDK with BuildTools Support
       run: |
         # Create SDK directory
         mkdir -p android-sdk
@@ -50,192 +50,89 @@ jobs:
         export ANDROID_HOME=$PWD
         export PATH=$PATH:$PWD/cmdline-tools/latest/bin:$PWD/platform-tools
         echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
         
-        # STEP 1: Accept ALL licenses with force flag
-        echo "Force accepting all licenses..."
-        yes | sdkmanager --sdk_root=$PWD --licenses --force
+        # Accept licenses
+        echo "Accepting all licenses..."
+        yes | sdkmanager --sdk_root=$PWD --licenses
         
-        # STEP 2: Update SDK manager
-        echo "Updating SDK manager..."
+        # Update SDK
+        echo "Updating SDK..."
         sdkmanager --sdk_root=$PWD --update
         
-        # STEP 3: Install required packages one by one with verification
-        echo "Installing Android SDK components step by step..."
-        
-        # Install platform tools
-        echo "Installing platform-tools..."
+        # Install packages
+        echo "Installing Android SDK components..."
         sdkmanager --sdk_root=$PWD "platform-tools"
-        
-        # Install Android platform
-        echo "Installing platforms;android-33..."
         sdkmanager --sdk_root=$PWD "platforms;android-33"
         
-        # FALLBACK STRATEGY: Try multiple build-tools versions
-        echo "Installing build-tools with FALLBACK strategy..."
-        
-        # First try: 33.0.2
+        # Install build-tools with fallback
+        echo "Installing build-tools..."
         if sdkmanager --sdk_root=$PWD "build-tools;33.0.2"; then
-          echo "✅ Successfully installed build-tools;33.0.2"
+          echo "✅ build-tools;33.0.2 installed"
         else
-          echo "❌ Failed to install build-tools;33.0.2, trying alternative..."
-          
-          # Alternative 1: Try without specific version
-          if sdkmanager --sdk_root=$PWD "build-tools"; then
-            echo "✅ Successfully installed build-tools (latest)"
-          else
-            # Alternative 2: Try specific versions in order
-            for version in "34.0.0" "33.0.1" "33.0.0" "30.0.0"; do
-              echo "Trying build-tools;$version..."
-              if sdkmanager --sdk_root=$PWD "build-tools;$version"; then
-                echo "✅ Successfully installed build-tools;$version"
-                break
-              fi
-            done
-          fi
+          echo "❌ build-tools;33.0.2 failed, trying latest..."
+          sdkmanager --sdk_root=$PWD "build-tools"
         fi
         
-        # Install system image
-        echo "Installing system-images;android-33;google_apis;x86_64..."
         sdkmanager --sdk_root=$PWD "system-images;android-33;google_apis;x86_64"
-        
-        # Install NDK and CMake
-        echo "Installing NDK and CMake..."
         sdkmanager --sdk_root=$PWD "ndk;26.2.11394342"
         sdkmanager --sdk_root=$PWD "cmake;3.22.1"
         
-        # Wait for installation to complete
-        echo "Waiting for installation to complete..."
-        sleep 10
-        
-        # CRITICAL: Verify build-tools installation
-        echo "🔍 VERIFYING BUILD-TOOLS INSTALLATION..."
-        echo "ANDROID_HOME: $ANDROID_HOME"
-        
-        if [ -d "$ANDROID_HOME/build-tools" ]; then
-          echo "✅ build-tools directory EXISTS"
-          ls -la $ANDROID_HOME/build-tools/
-        else
-          echo "❌ build-tools directory NOT FOUND!"
-          echo "Looking for build-tools in alternative locations..."
-          
-          # Search for build-tools in all subdirectories
-          find $ANDROID_HOME -name "build-tools" -type d 2>/dev/null || echo "No build-tools directory found anywhere"
-          
-          # Create build-tools directory manually if needed
-          echo "Attempting to create build-tools directory and reinstall..."
-          sdkmanager --sdk_root=$PWD --list | grep build-tools
-          
-          # Try one more time with different approach
-          sdkmanager --sdk_root=$PWD --install "build-tools;33.0.2" --verbose
-          sleep 5
-        fi
-        
-        # Final verification
-        echo "📋 FINAL SDK INSTALLATION STATUS:"
+        # Verify installation
+        echo "Verifying SDK installation..."
         sdkmanager --sdk_root=$PWD --list_installed
         
-        # List all contents
-        echo "📂 ANDROID_HOME contents:"
-        ls -la $ANDROID_HOME/
-        
+        # Check build-tools
         if [ -d "$ANDROID_HOME/build-tools" ]; then
-          echo "📂 build-tools contents:"
+          echo "✅ build-tools directory found"
           ls -la $ANDROID_HOME/build-tools/
+        else
+          echo "❌ build-tools directory missing"
+          exit 1
         fi
     
-    - name: Set up NDK environment (SAFETY CHECK)
+    - name: Set up Android environment
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        
-        echo "🔧 Setting up NDK environment..."
-        
-        # Find NDK directory
-        if [ -d "$ANDROID_HOME/ndk/26.2.11394342" ]; then
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
-          echo "✅ Found NDK at: $ANDROID_NDK_HOME"
-          ls -la $ANDROID_NDK_HOME/
-        else
-          echo "❌ NDK directory not found at expected location"
-          echo "Searching for NDK in $ANDROID_HOME..."
-          find $ANDROID_HOME -name "*ndk*" -type d 2>/dev/null || echo "No NDK directories found"
-        fi
-        
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
         echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        
-        # Update PATH
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
-        echo "PATH=$PATH" >> $GITHUB_ENV
-        
-    - name: CRITICAL: Verify all components (DETAILED CHECK)
+        echo "PATH=$PATH:$ANDROID_NDK_HOME" >> $GITHUB_ENV
+    
+    - name: Verify Android components
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
         export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
         
-        echo "🔍 COMPREHENSIVE ENVIRONMENT VERIFICATION"
-        echo "=========================================="
+        echo "🔍 VERIFYING ANDROID COMPONENTS"
+        echo "=============================="
         
-        echo "1️⃣ ANDROID_HOME check:"
-        if [ -d "$ANDROID_HOME" ]; then
-          echo "✅ ANDROID_HOME exists: $ANDROID_HOME"
-        else
-          echo "❌ ANDROID_HOME does not exist!"
-          exit 1
-        fi
-        
-        echo "2️⃣ Build-tools check:"
+        # Check build-tools
         if [ -d "$ANDROID_HOME/build-tools" ]; then
-          echo "✅ build-tools directory exists"
+          echo "✅ build-tools: OK"
           ls -la $ANDROID_HOME/build-tools/
           
-          echo "   Checking for AIDL tool in build-tools:"
-          AIDL_FILES=$(find $ANDROID_HOME/build-tools -name "aidl" -type f 2>/dev/null)
-          if [ ! -z "$AIDL_FILES" ]; then
-            echo "✅ AIDL found:"
-            echo "$AIDL_FILES"
+          # Check AIDL
+          if find $ANDROID_HOME/build-tools -name "aidl" -type f | grep -q .; then
+            echo "✅ AIDL: FOUND"
           else
-            echo "⚠️ AIDL not found in build-tools, searching whole SDK..."
-            FIND_RESULT=$(find $ANDROID_HOME -name "aidl" -type f 2>/dev/null | head -1)
-            if [ ! -z "$FIND_RESULT" ]; then
-              echo "✅ AIDL found at: $FIND_RESULT"
-            else
-              echo "❌ AIDL not found anywhere in SDK!"
-              exit 1
-            fi
+            echo "❌ AIDL: NOT FOUND"
+            exit 1
           fi
         else
-          echo "❌ build-tools directory does NOT exist!"
-          echo "   Available directories in ANDROID_HOME:"
-          ls -la $ANDROID_HOME/
+          echo "❌ build-tools: MISSING"
           exit 1
         fi
         
-        echo "3️⃣ NDK check:"
+        # Check NDK
         if [ -d "$ANDROID_NDK_HOME" ]; then
-          echo "✅ NDK exists: $ANDROID_NDK_HOME"
+          echo "✅ NDK: OK"
         else
-          echo "❌ NDK does not exist!"
-          echo "   NDK should be at: $ANDROID_HOME/ndk/26.2.11394342"
-          ls -la $ANDROID_HOME/ndk/ 2>/dev/null || echo "NDK directory not found"
+          echo "❌ NDK: MISSING"
           exit 1
         fi
         
-        echo "4️⃣ Platform tools check:"
-        if [ -f "$ANDROID_HOME/platform-tools/adb" ]; then
-          echo "✅ ADB found in platform-tools"
-        else
-          echo "❌ ADB not found!"
-          ls -la $ANDROID_HOME/platform-tools/ 2>/dev/null || echo "platform-tools directory missing"
-        fi
-        
-        echo "5️⃣ Java check:"
-        java -version
-        echo "✅ Java is available"
-        
-        echo "=========================================="
-        echo "✅ ALL CRITICAL CHECKS PASSED - READY FOR BUILD"
+        echo "✅ ALL COMPONENTS VERIFIED"
     
     - name: Install system dependencies
       run: |
@@ -260,7 +157,6 @@ jobs:
     
     - name: Create buildozer configuration
       run: |
-        # Create buildozer.spec
         cat > buildozer.spec << 'EOF'
         [app]
         
@@ -289,37 +185,29 @@ jobs:
         
         echo "✅ buildozer.spec created"
     
-    - name: Build Android APK (WITH COMPREHENSIVE CHECKS)
+    - name: Build Android APK
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
         export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
-        export ANDROID_SDK_ROOT=${{ env.ANDROID_HOME }}
         
-        echo "🚀 STARTING APK BUILD WITH FULL VERIFICATION"
-        echo "============================================"
-        
-        # Pre-build verification
-        echo "Pre-build verification..."
-        ls -la $ANDROID_HOME/build-tools/
-        echo "AIDL locations:"
-        find $ANDROID_HOME -name "aidl" -type f 2>/dev/null || echo "AIDL search completed"
+        echo "🚀 STARTING APK BUILD"
+        echo "===================="
         
         # Create android directory
         mkdir -p android
         cp buildozer.spec android/
         
         # Copy source files
-        cp *.py android/ 2>/dev/null || echo "No Python files to copy"
+        cp *.py android/ 2>/dev/null || echo "No Python files found"
         
-        echo "📂 Android directory contents:"
+        echo "Android directory contents:"
         ls -la android/
         
-        # Navigate and build
+        # Build APK
         cd android
-        echo "🏗️ Building APK..."
         buildozer android debug --verbose
         
-        echo "✅ BUILD COMPLETED SUCCESSFULLY"
+        echo "✅ BUILD COMPLETED"
     
     - name: Upload APK artifact
       if: success()
@@ -329,20 +217,18 @@ jobs:
         path: android/bin/*.apk
         retention-days: 30
     
-    - name: Build completion summary
+    - name: Build summary
       if: always()
       run: |
         echo "📱 BUILD SUMMARY"
-        echo "================="
+        echo "================"
         
         if [ -d "android/bin" ] && [ -f "android/bin/"*.apk ]; then
-          echo "✅ SUCCESS: APK files created"
+          echo "✅ APK SUCCESS"
           ls -lah android/bin/*.apk
         else
-          echo "❌ FAILURE: No APK files found"
-          echo "Checking android directory:"
-          ls -la android/ 2>/dev/null || echo "Android directory not found"
+          echo "❌ APK FAILED"
         fi
         
-        echo "================="
+        echo "================"
         echo "Build completed at: $(date)"
