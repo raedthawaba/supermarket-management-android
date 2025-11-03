@@ -48,12 +48,20 @@ jobs:
         echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
         echo "PATH=$PATH" >> $GITHUB_ENV
         
-        # Accept licenses and install required packages
+        # Accept all licenses first
         yes | sdkmanager --licenses
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2" "build-tools;34.0.0"
+        sdkmanager --update
+        
+        # Install required packages - ONLY build-tools;33.0.2 to avoid license issues
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
         sdkmanager "system-images;android-33;google_apis;x86_64"
+        
+        # List available NDK versions
         sdkmanager --list | grep -i ndk
         sdkmanager "ndk;26.2.11394342" "cmake;3.22.1"
+        
+        # Final license check
+        sdkmanager --list_installed
     
     - name: Install additional system dependencies
       run: |
@@ -90,9 +98,10 @@ jobs:
         mkdir -p ~/.buildozer
         mkdir -p ~/android
         
-        # Verify AIDL is available
-        echo "Checking for AIDL..."
-        find $ANDROID_HOME -name "aidl*" -type f 2>/dev/null || echo "AIDL not found yet"
+        # Verify SDK installation
+        echo "Checking SDK installation..."
+        sdkmanager --list_installed
+        echo "Build tools available:"
         ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools directory not found"
         
     - name: Create buildozer configuration
@@ -149,7 +158,7 @@ jobs:
         
         # Verify file was created
         ls -la buildozer.spec
-        
+    
     - name: Build Android APK
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
@@ -157,9 +166,10 @@ jobs:
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         
-        # Final AIDL check before building
-        echo "Final AIDL check..."
-        find $ANDROID_HOME -name "aidl*" -type f 2>/dev/null || echo "AIDL search completed"
+        # Final verification before building
+        echo "Final verification..."
+        sdkmanager --list_installed
+        echo "Build tools directory:"
         ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools not found"
         
         # Verify buildozer.spec exists
@@ -171,18 +181,20 @@ jobs:
         # Copy buildozer.spec to android directory
         cp buildozer.spec android/
         
-        # Copy source files to android directory
+        # Copy source files to android directory if they exist
         cp main.py android/ 2>/dev/null || echo "main.py not found"
         cp android_supermarket_app.py android/ 2>/dev/null || echo "android_supermarket_app.py not found"
         cp main_android_app.py android/ 2>/dev/null || echo "main_android_app.py not found"
         
         # List contents of android directory
+        echo "Contents of android directory:"
         ls -la android/
         
         # Build the APK
         cd android
-        buildozer android debug
-        
+        echo "Starting buildozer build..."
+        buildozer android debug --verbose
+    
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
