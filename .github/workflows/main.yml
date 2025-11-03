@@ -1,9 +1,11 @@
 name: Build Android APK
+
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -85,11 +87,12 @@ jobs:
         
         # Create necessary directories
         mkdir -p ~/.buildozer
+        mkdir -p ~/android
     
     - name: Create buildozer configuration
       run: |
-        # Create local buildozer config if not exists
-        cat > ~/.buildozer/buildozer.spec << EOF
+        # Create local buildozer config
+        cat > buildozer.spec << 'EOF'
         [app]
         
         # (str) Title of your application
@@ -137,7 +140,10 @@ jobs:
         #bin_dir = ./bin
         
         EOF
-    
+        
+        # Verify file was created
+        ls -la buildozer.spec
+        
     - name: Build Android APK
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
@@ -145,16 +151,22 @@ jobs:
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         
+        # Verify buildozer.spec exists
+        ls -la buildozer.spec
+        
         # Create android directory with proper structure
         mkdir -p android
         
-        # Copy buildozer.spec
+        # Copy buildozer.spec to android directory
         cp buildozer.spec android/
         
-        # Copy source files
-        cp main.py android/
-        cp android_supermarket_app.py android/
-        cp main_android_app.py android/
+        # Copy source files to android directory
+        cp main.py android/ 2>/dev/null || echo "main.py not found"
+        cp android_supermarket_app.py android/ 2>/dev/null || echo "android_supermarket_app.py not found"
+        cp main_android_app.py android/ 2>/dev/null || echo "main_android_app.py not found"
+        
+        # List contents of android directory
+        ls -la android/
         
         # Build the APK
         cd android
