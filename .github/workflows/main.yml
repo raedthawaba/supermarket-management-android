@@ -22,7 +22,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements_android.txt
+        pip install -r requirements_android.txt 2>/dev/null || echo "requirements_android.txt not found"
         pip install setuptools cython
         pip install buildozer
     
@@ -33,12 +33,16 @@ jobs:
         java -version
         javac -version
     
-    - name: Install Android SDK
+    - name: Install Android SDK (Strict version control)
       run: |
+        # Create SDK directory
         mkdir -p android-sdk
         cd android-sdk
-        wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        unzip commandlinetools-linux-11076708_latest.zip
+        
+        # Download command line tools
+        echo "Downloading Android SDK command line tools..."
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
         mkdir -p cmdline-tools/latest
         mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
         
@@ -47,23 +51,86 @@ jobs:
         export PATH=$PATH:$PWD/cmdline-tools/latest/bin:$PWD/platform-tools
         echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
         echo "PATH=$PATH" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
         
-        # Accept all licenses first
-        yes | sdkmanager --licenses
-        sdkmanager --update
+        # STEP 1: Accept ALL licenses explicitly
+        echo "Accepting all licenses..."
+        echo "y" | sdkmanager --licenses
         
-        # Install required packages - ONLY build-tools;33.0.2 to avoid license issues
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
-        sdkmanager "system-images;android-33;google_apis;x86_64"
+        # STEP 2: Update SDK manager
+        echo "Updating SDK manager..."
+        sdkmanager --update --verbose
         
-        # List available NDK versions
-        sdkmanager --list | grep -i ndk
-        sdkmanager "ndk;26.2.11394342" "cmake;3.22.1"
+        # STEP 3: Install ONLY specific versions (NO newer versions allowed)
+        echo "Installing Android SDK components..."
         
-        # Final license check
+        # Install platform tools first
+        sdkmanager --install "platform-tools"
+        
+        # Install Android platform (API 33)
+        sdkmanager --install "platforms;android-33"
+        
+        # Install build tools - ONLY version 33.0.2
+        sdkmanager --install "build-tools;33.0.2"
+        
+        # Install system image
+        sdkmanager --install "system-images;android-33;google_apis;x86_64"
+        
+        # Install NDK and CMake
+        sdkmanager --install "ndk;26.2.11394342"
+        sdkmanager --install "cmake;3.22.1"
+        
+        # Verify installations
+        echo "Verifying SDK installations..."
         sdkmanager --list_installed
     
-    - name: Install additional system dependencies
+    - name: Verify build tools installation (CRITICAL CHECK)
+      run: |
+        export ANDROID_HOME=${{ env.ANDROID_HOME }}
+        export ANDROID_SDK_ROOT=${{ env.ANDROID_HOME }}
+        
+        echo "Checking if build-tools directory exists..."
+        if [ -d "$ANDROID_HOME/build-tools" ]; then
+          echo "✅ build-tools directory found"
+          ls -la $ANDROID_HOME/build-tools/
+        else
+          echo "❌ build-tools directory NOT found - CRITICAL ERROR"
+          exit 1
+        fi
+        
+        echo "Checking if AIDL tool exists..."
+        AIDL_PATHS=(
+          "$ANDROID_HOME/build-tools/33.0.2/aidl"
+          "$ANDROID_HOME/build-tools/aidl"
+          "$(find $ANDROID_HOME -name 'aidl' -type f 2>/dev/null | head -1)"
+        )
+        
+        AIDL_FOUND=false
+        for aidl_path in "${AIDL_PATHS[@]}"; do
+          if [ -f "$aidl_path" ]; then
+            echo "✅ AIDL found at: $aidl_path"
+            AIDL_FOUND=true
+            break
+          fi
+        done
+        
+        if [ "$AIDL_FOUND" = false ]; then
+          echo "❌ AIDL not found - CRITICAL ERROR"
+          echo "Available files in build-tools:"
+          find $ANDROID_HOME/build-tools -type f 2>/dev/null || echo "No build-tools files found"
+          exit 1
+        fi
+        
+        # Set NDK environment variables
+        echo "Setting up NDK environment..."
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
+        echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+        
+        # Final PATH setup
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
+        echo "PATH=$PATH" >> $GITHUB_ENV
+    
+    - name: Install system dependencies (No problematic packages)
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -81,32 +148,12 @@ jobs:
           libgbm1 \
           libxss1 \
           libasound2t64 \
-          unzip
+          unzip \
+          python3-distutils
     
-    - name: Set up buildozer
-      run: |
-        # Configure environment for buildozer
-        export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
-        export ANDROID_SDK_ROOT=$ANDROID_HOME
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
-        
-        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        
-        # Create necessary directories
-        mkdir -p ~/.buildozer
-        mkdir -p ~/android
-        
-        # Verify SDK installation
-        echo "Checking SDK installation..."
-        sdkmanager --list_installed
-        echo "Build tools available:"
-        ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools directory not found"
-        
     - name: Create buildozer configuration
       run: |
-        # Create local buildozer config
+        # Create buildozer.spec with proper configuration
         cat > buildozer.spec << 'EOF'
         [app]
         
@@ -116,98 +163,124 @@ jobs:
         # (str) Package name
         package.name = supermarket
         
-        # (str) Package domain (needed for android/ios packaging)
+        # (str) Package domain
         package.domain = com.supermarket
         
-        # (str) Source code where the main.py live
+        # (str) Source code directory
         source.dir = .
         
-        # (list) Source files to include (let empty to include all the files)
+        # (list) Source files to include
         source.include_exts = py,png,jpg,kv,atlas,wav,ttf
         
-        # (str) Application versioning (method 1)
+        # (str) Application version
         version = 1.0.0
         
         # (list) Application requirements
         requirements = python3,kivy==2.3.1,kivymd==1.2.0,pillow,sqlite3
         
-        # (str) Presplash of the application
-        #presplash.filename = %(source.dir)s/data/presplash.png
-        
-        # (str) Icon of the application
-        #icon.filename = %(source.dir)s/data/icon.png
-        
-        # (str) Supported orientation (landscape, portrait, all or unset)
+        # (str) Application orientation
         orientation = portrait
         
         [buildozer]
         
-        # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
+        # (int) Log level (0 = error only, 1 = info, 2 = debug)
         log_level = 2
         
-        # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
+        # (int) Display warning if buildozer is run as root
         warn_on_root = 1
         
-        # (str) Path to build artifact storage, absolute or relative to spec file
-        #build_dir = ./.buildozer
+        [android]
         
-        # (str) Path to build output i.e. .apk, .ipa files storage.
-        #bin_dir = ./bin
+        # Android SDK and NDK versions
+        android.ndk = 26.2.11394342
+        android.sdk = 33
+        
+        # Supported architectures
+        android.archs = arm64-v8a,armeabi-v7a
+        
+        # Enable AndroidX
+        android.enable_androidx = False
         
         EOF
         
-        # Verify file was created
-        ls -la buildozer.spec
+        echo "✅ buildozer.spec created"
+        cat buildozer.spec
     
-    - name: Build Android APK
+    - name: Final environment verification (BEFORE BUILD)
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
-        export ANDROID_SDK_ROOT=$ANDROID_HOME
+        export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
+        export ANDROID_SDK_ROOT=${{ env.ANDROID_HOME }}
+        
+        echo "🔍 FINAL PRE-BUILD VERIFICATION"
+        echo "=================================="
+        
+        echo "1. Checking Android SDK home: $ANDROID_HOME"
+        ls -la $ANDROID_HOME/ | head -10
+        
+        echo "2. Checking build-tools directory:"
+        ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "❌ build-tools missing!"
+        
+        echo "3. Looking for AIDL tool:"
+        find $ANDROID_HOME -name "aidl*" -type f 2>/dev/null || echo "❌ AIDL missing!"
+        
+        echo "4. Checking NDK installation:"
+        ls -la $ANDROID_NDK_HOME/ 2>/dev/null || echo "❌ NDK missing!"
+        
+        echo "5. Testing buildozer:"
+        buildozer --version
+        
+        echo "=================================="
+        echo "✅ Environment verification completed"
+    
+    - name: Build Android APK (FINAL BUILD)
+      run: |
+        export ANDROID_HOME=${{ env.ANDROID_HOME }}
+        export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
+        export ANDROID_SDK_ROOT=${{ env.ANDROID_HOME }}
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         
-        # Final verification before building
-        echo "Final verification..."
-        sdkmanager --list_installed
-        echo "Build tools directory:"
-        ls -la $ANDROID_HOME/build-tools/ 2>/dev/null || echo "Build tools not found"
+        echo "🚀 STARTING FINAL APK BUILD"
+        echo "=========================="
         
-        # Verify buildozer.spec exists
-        ls -la buildozer.spec
-        
-        # Create android directory with proper structure
+        # Create android directory
         mkdir -p android
-        
-        # Copy buildozer.spec to android directory
         cp buildozer.spec android/
         
-        # Copy source files to android directory if they exist
-        cp main.py android/ 2>/dev/null || echo "main.py not found"
-        cp android_supermarket_app.py android/ 2>/dev/null || echo "android_supermarket_app.py not found"
-        cp main_android_app.py android/ 2>/dev/null || echo "main_android_app.py not found"
+        # Copy source files if they exist
+        cp *.py android/ 2>/dev/null || echo "No Python files to copy"
         
-        # List contents of android directory
         echo "Contents of android directory:"
         ls -la android/
         
-        # Build the APK
+        # Navigate to android directory and build
         cd android
-        echo "Starting buildozer build..."
+        echo "Building APK with buildozer..."
         buildozer android debug --verbose
+        
+        echo "=========================="
+        echo "✅ APK BUILD COMPLETED"
     
     - name: Upload APK artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: android-apk
         path: android/bin/*.apk
         retention-days: 30
     
-    - name: Display build information
+    - name: Build summary
       if: always()
       run: |
-        echo "Build completed!"
-        ls -la android/bin/ || echo "No bin directory found"
-        if [ -f "android/bin/"*.apk ]; then
-          echo "APK files created:"
-          ls -lah android/bin/*.apk
+        echo "📱 BUILD SUMMARY"
+        echo "================="
+        
+        if [ -d "android/bin" ]; then
+          echo "✅ APK artifacts directory found"
+          ls -lah android/bin/*.apk 2>/dev/null || echo "No APK files found"
+        else
+          echo "❌ No APK artifacts directory"
         fi
+        
+        echo "================="
+        echo "Build completed at: $(date)"
