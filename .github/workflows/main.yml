@@ -53,26 +53,38 @@ jobs:
         echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
         echo "PATH=$PATH" >> $GITHUB_ENV
         
-        # Accept licenses
-        echo "Accepting all licenses..."
+        # Accept licenses - COMPREHENSIVE ACCEPTANCE
+        echo "Accepting all licenses comprehensively..."
         yes | sdkmanager --sdk_root=$PWD --licenses
+        echo "y" | sdkmanager --sdk_root=$PWD --licenses
+        echo -e "\n" | sdkmanager --sdk_root=$PWD --licenses
         
         # Update SDK
         echo "Updating SDK..."
         sdkmanager --sdk_root=$PWD --update
         
-        # Install packages
+        # Install packages - FORCE SPECIFIC VERSION
         echo "Installing Android SDK components..."
         sdkmanager --sdk_root=$PWD "platform-tools"
         sdkmanager --sdk_root=$PWD "platforms;android-33"
         
-        # Install build-tools with fallback
-        echo "Installing build-tools..."
+        # CRITICAL: Force build-tools version to avoid license issues
+        echo "Installing build-tools with explicit version control..."
+        
+        # First, try specific known working version
         if sdkmanager --sdk_root=$PWD "build-tools;33.0.2"; then
-          echo "✅ build-tools;33.0.2 installed"
+          echo "✅ build-tools;33.0.2 installed successfully"
         else
-          echo "❌ build-tools;33.0.2 failed, trying latest..."
-          sdkmanager --sdk_root=$PWD "build-tools"
+          echo "⚠️  build-tools;33.0.2 failed, trying alternative approach..."
+          
+          # Accept ALL licenses for all possible versions
+          echo "Accepting ALL licenses for all versions..."
+          for version in 36.1.0 34.0.0 33.0.2 33.0.1 33.0.0; do
+            echo "y" | sdkmanager --sdk_root=$PWD "build-tools;${version}"
+          done
+          
+          # Try latest version after license acceptance
+          sdkmanager --sdk_root=$PWD "build-tools;36.1.0"
         fi
         
         sdkmanager --sdk_root=$PWD "system-images;android-33;google_apis;x86_64"
@@ -83,10 +95,23 @@ jobs:
         echo "Verifying SDK installation..."
         sdkmanager --sdk_root=$PWD --list_installed
         
-        # Check build-tools
+        # Check build-tools with detailed verification
         if [ -d "$ANDROID_HOME/build-tools" ]; then
           echo "✅ build-tools directory found"
           ls -la $ANDROID_HOME/build-tools/
+          
+          # Find the actual build-tools version installed
+          BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | head -n1)
+          echo "📦 Installed build-tools version: $BUILD_TOOLS_VERSION"
+          
+          # Check for AIDL in the installed version
+          if [ -f "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aidl" ]; then
+            echo "✅ AIDL tool found at: $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aidl"
+          else
+            echo "❌ AIDL tool NOT found in build-tools;$BUILD_TOOLS_VERSION"
+            echo "🔍 Searching for AIDL in all build-tools directories..."
+            find $ANDROID_HOME/build-tools -name "aidl" -type f 2>/dev/null || echo "AIDL not found anywhere"
+          fi
         else
           echo "❌ build-tools directory missing"
           exit 1
@@ -98,25 +123,50 @@ jobs:
         export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
         echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
         echo "PATH=$PATH:$ANDROID_NDK_HOME" >> $GITHUB_ENV
+        
+        # CRITICAL: Add build-tools to PATH after verification
+        BUILD_TOOLS_DIR=$(find $ANDROID_HOME/build-tools -maxdepth 1 -type d -name "*.*.*" | head -n1)
+        if [ -n "$BUILD_TOOLS_DIR" ]; then
+          BUILD_TOOLS_VERSION=$(basename "$BUILD_TOOLS_DIR")
+          echo "PATH=$PATH:$BUILD_TOOLS_DIR" >> $GITHUB_ENV
+          echo "🔧 Added build-tools;$BUILD_TOOLS_VERSION to PATH"
+        fi
     
-    - name: Verify Android components
+    - name: Verify Android components (FINAL CHECK)
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
         export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
         
-        echo "🔍 VERIFYING ANDROID COMPONENTS"
-        echo "=============================="
+        echo "🔍 FINAL VERIFICATION OF ANDROID COMPONENTS"
+        echo "============================================="
         
         # Check build-tools
         if [ -d "$ANDROID_HOME/build-tools" ]; then
           echo "✅ build-tools: OK"
           ls -la $ANDROID_HOME/build-tools/
           
-          # Check AIDL
-          if find $ANDROID_HOME/build-tools -name "aidl" -type f | grep -q .; then
-            echo "✅ AIDL: FOUND"
-          else
-            echo "❌ AIDL: NOT FOUND"
+          # Find and test AIDL - COMPREHENSIVE SEARCH
+          AIDL_FOUND=false
+          for build_tools_dir in $ANDROID_HOME/build-tools/*/; do
+            if [ -d "$build_tools_dir" ]; then
+              version=$(basename "$build_tools_dir")
+              if [ -f "$build_tools_dir/aidl" ]; then
+                echo "✅ AIDL: FOUND in build-tools;$version"
+                echo "📍 AIDL path: $build_tools_dir/aidl"
+                
+                # Test AIDL execution
+                if "$build_tools_dir/aidl" --help >/dev/null 2>&1; then
+                  echo "✅ AIDL: EXECUTABLE"
+                  AIDL_FOUND=true
+                else
+                  echo "⚠️  AIDL: Found but not executable"
+                fi
+              fi
+            fi
+          done
+          
+          if [ "$AIDL_FOUND" = false ]; then
+            echo "❌ AIDL: NOT FOUND ANYWHERE - THIS WILL CAUSE BUILD FAILURE"
             exit 1
           fi
         else
@@ -132,7 +182,7 @@ jobs:
           exit 1
         fi
         
-        echo "✅ ALL COMPONENTS VERIFIED"
+        echo "✅ ALL COMPONENTS VERIFIED - READY FOR BUILD"
     
     - name: Install system dependencies (Ubuntu 24.04 Compatible)
       run: |
@@ -194,6 +244,26 @@ jobs:
         
         echo "🚀 STARTING APK BUILD"
         echo "===================="
+        
+        # CRITICAL: Ensure AIDL is in PATH
+        for build_tools_dir in $ANDROID_HOME/build-tools/*/; do
+          if [ -d "$build_tools_dir" ] && [ -f "$build_tools_dir/aidl" ]; then
+            version=$(basename "$build_tools_dir")
+            echo "🔧 Adding build-tools;$version to PATH"
+            export PATH=$PATH:$build_tools_dir
+          fi
+        done
+        
+        # Verify AIDL is accessible
+        if command -v aidl >/dev/null 2>&1; then
+          echo "✅ AIDL is accessible in PATH"
+          aidl --help | head -n5
+        else
+          echo "❌ AIDL is NOT accessible in PATH"
+          echo "🔍 Searching for AIDL manually..."
+          find $ANDROID_HOME -name "aidl" -type f
+          exit 1
+        fi
         
         # Create android directory
         mkdir -p android
