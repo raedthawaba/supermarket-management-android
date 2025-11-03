@@ -26,10 +26,10 @@ jobs:
         pip install setuptools cython
         pip install buildozer
     
-    - name: Install Java JDK 11
+    - name: Install Java JDK 17
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk
+        sudo apt-get install -y openjdk-17-jdk
         java -version
         javac -version
     
@@ -52,7 +52,7 @@ jobs:
         yes | sdkmanager --licenses
         sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
         sdkmanager --list | grep -i ndk
-        sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
+        sdkmanager "ndk;26.2.11394342" "cmake;3.22.1"
     
     - name: Install additional system dependencies
       run: |
@@ -61,7 +61,8 @@ jobs:
           build-essential \
           ccache \
           git \
-          libncurses5 \
+          libncurses6 \
+          libncurses-dev \ 
           libstdc++6 \
           libgtk-3-0 \
           libx11-xcb1 \
@@ -71,18 +72,18 @@ jobs:
           libxrandr2 \
           libgbm1 \
           libxss1 \
-          libasound2 \
+          libasound-dev \
           unzip
     
     - name: Set up buildozer
       run: |
         # Configure environment for buildozer
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         
-        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
         
         # Create necessary directories
@@ -143,7 +144,7 @@ jobs:
     - name: Build Android APK
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653
+        export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.2.11394342
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         
