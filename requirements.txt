@@ -1,16 +1,18 @@
-# متطلبات نظام إدارة السوبر ماركت المحسن
-# Requirements for Improved Supermarket Management System
+# متطلبات بناء تطبيق Android لنظام إدارة السوبر ماركت
+# Requirements for Android APK Build of Supermarket Management System
 
-# الوحدات الأساسية مدمجة في Python
-# Basic modules are built into Python
-# - tkinter (GUI framework)
-# - sqlite3 (database)
-# - json (data handling)
-# - os (file operations)
-# - datetime (date/time operations)
-# - pathlib (path handling)
-# - logging (logging system)
+# Kivy framework for cross-platform mobile development
+kivy==2.3.1
 
-# ملاحظة: لا حاجة لتثبيت مكتبات إضافية
-# Note: No additional libraries need to be installed
-# النظام يعمل مع Python 3.6+ فقط
+# KivyMD for Material Design components
+kivymd==1.2.0
+
+# Buildozer for Android APK compilation
+buildozer==1.5.0
+
+# Additional dependencies for Android build
+setuptools>=65.0.0
+cython>=3.0.0
+
+# Pillow for image processing
+pillow>=10.0.0
