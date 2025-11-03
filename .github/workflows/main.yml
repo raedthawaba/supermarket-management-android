@@ -168,7 +168,7 @@ jobs:
         # Update PATH
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_NDK_HOME
         echo "PATH=$PATH" >> $GITHUB_ENV
-    
+        
     - name: CRITICAL: Verify all components (DETAILED CHECK)
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
