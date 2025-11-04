@@ -1,257 +1,80 @@
-name: Build Android APK
+- name: Build Android APK (Fixed Version)
+  run: |
+    export ANDROID_HOME=${{ env.ANDROID_HOME }}
+    export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
+    export PATH=$PATH:$ANDROID_HOME/build-tools/34.0.0
+    
+    echo "🔧 Final environment configuration:"
+    echo "ANDROID_HOME: $ANDROID_HOME"
+    echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+    echo "PATH: $PATH"
+    
+    # Verify critical tools
+    echo "🔍 Tool verification:"
+    which aidl && echo "✅ AIDL found" || echo "❌ AIDL missing"
+    which aapt && echo "✅ AAPT found" || echo "❌ AAPT missing"
+    which zipalign && echo "✅ zipalign found" || echo "❌ zipalign missing"
+    
+    # Create android directory with fixed buildozer.spec
+    mkdir -p android
+    cat > android/buildozer.spec << 'EOF'
+[app]
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+title = نظام السوبر ماركت
+package.name = supermarket
+package.domain = com.supermarket
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas,wav,ttf
+version = 1.0.0
+requirements = python3,kivy==2.3.1,kivymd==1.2.0,pillow,sqlite3
+orientation = portrait
 
-jobs:
-  build-android:
-    runs-on: ubuntu-latest
+[buildozer]
+
+log_level = 2
+warn_on_root = 1
+
+[android]
+
+# FORCE SPECIFIC VERSIONS TO AVOID LICENSE ISSUES
+android.ndk = 25.2.9519653
+android.sdk = 33
+android.build_tools = 34.0.0
+android.archs = arm64-v8a,armeabi-v7a
+android.enable_androidx = False
+
+# PREVENT AUTO-DOWNLOAD OF NEW VERSIONS
+android.skip_update = True
+android.accept_sdk_license = True
+
+EOF
+
+    # Copy Python files
+    cp *.py android/ 2>/dev/null || echo "📁 No Python files to copy"
     
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    cd android
     
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+    # Clean any previous builds
+    echo "🧹 Cleaning previous builds..."
+    buildozer android clean
     
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements_android.txt 2>/dev/null || echo "requirements_android.txt not found"
-        pip install setuptools cython
-        pip install buildozer
+    # Build with verbose output
+    echo "🚀 Starting build..."
+    buildozer android debug 2>&1 | tee build.log
     
-    - name: Install Java JDK 17
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y openjdk-17-jdk
-        java -version
-        javac -version
-    
-    - name: Install Android SDK (Fixed License Issue)
-      run: |
-        # Create SDK directory
-        mkdir -p android-sdk
-        cd android-sdk
-        
-        # Download command line tools
-        echo "📥 Downloading Android SDK command line tools..."
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        unzip -q commandlinetools-linux-11076708_latest.zip
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-        
-        # Set up environment
-        export ANDROID_HOME=$PWD
-        export ANDROID_SDK_ROOT=$PWD
-        export PATH=$PATH:$PWD/cmdline-tools/latest/bin
-        echo "ANDROID_HOME=$PWD" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
-        
-        # FIXED LICENSE SOLUTION - Create license files manually
-        echo "🔑 FIXED LICENSE ACCEPTANCE..."
-        mkdir -p licenses
-        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > licenses/android-sdk-preview-license
-        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > licenses/intel-android-extra-license
-        
-        # Also accept licenses normally
-        yes | sdkmanager --sdk_root=$PWD --licenses || true
-        
-        # Install packages with fixed licensing
-        echo "📦 Installing Android packages..."
-        sdkmanager --sdk_root=$PWD "platform-tools"
-        sdkmanager --sdk_root=$PWD "build-tools;34.0.0"
-        sdkmanager --sdk_root=$PWD "platforms;android-33"
-        sdkmanager --sdk_root=$PWD "ndk;25.2.9519653"
-        
-        # Verify installation
-        echo "🔍 Verifying installation..."
-        sdkmanager --sdk_root=$PWD --list_installed
-        
-        # Add build-tools to PATH
-        if [ -d "$ANDROID_HOME/build-tools" ]; then
-          echo "✅ build-tools directory found!"
-          for dir in $ANDROID_HOME/build-tools/*/; do
-            if [ -d "$dir" ]; then
-              export PATH=$PATH:$dir
-            fi
-          done
-          echo "PATH=$PATH" >> $GITHUB_ENV
+    # Check if APK was created
+    if find . -name "*.apk" -type f | grep -q .; then
+        echo "🎉 APK built successfully!"
+        find . -name "*.apk" -type f -exec ls -la {} \;
+    else
+        echo "❌ Build failed - checking logs..."
+        if [ -f "buildozer.log" ]; then
+            echo "=== buildozer.log ==="
+            tail -100 buildozer.log
         fi
-    
-    - name: Install system dependencies (Ubuntu 24.04 Compatible)
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          ccache \
-          git \
-          libncurses6 \
-          libstdc++6 \
-          libgtk-3-0 \
-          libx11-xcb1 \
-          libxcb-dri3-0 \
-          libxcomposite1 \
-          libxdamage1 \
-          libxrandr2 \
-          libgbm1 \
-          libxss1 \
-          libasound2t64 \
-          unzip \
-          python3-setuptools
-    
-    - name: Create buildozer configuration
-      run: |
-        cat > buildozer.spec << 'EOF'
-        [app]
-        
-        title = نظام السوبر ماركت
-        package.name = supermarket
-        package.domain = com.supermarket
-        source.dir = .
-        source.include_exts = py,png,jpg,kv,atlas,wav,ttf
-        version = 1.0.0
-        requirements = python3,kivy==2.3.1,kivymd==1.2.0,pillow,sqlite3
-        orientation = portrait
-        
-        [buildozer]
-        
-        log_level = 2
-        warn_on_root = 1
-        
-        [android]
-        
-        android.ndk = 25.2.9519653
-        android.sdk = 33
-        android.archs = arm64-v8a,armeabi-v7a
-        android.enable_androidx = False
-        
-        EOF
-    
-    - name: Build Android APK (Complete Ultimate Method)
-      run: |
-        export ANDROID_HOME=${{ env.ANDROID_HOME }}
-        export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
-        
-        echo "🔧 Final environment configuration:"
-        echo "ANDROID_HOME: $ANDROID_HOME"
-        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-        echo "PATH: $PATH"
-        
-        # Verify all critical tools
-        echo "🔍 Comprehensive tool verification:"
-        echo "--- AIDL ---"
-        which aidl && echo "✅ AIDL found" || echo "❌ AIDL missing"
-        
-        echo "--- zipalign ---"
-        which zipalign && echo "✅ zipalign found" || echo "❌ zipalign missing"
-        
-        echo "--- aapt ---"
-        which aapt && echo "✅ AAPT found" || echo "❌ AAPT missing"
-        
-        echo "--- CMake ---"
-        which cmake && echo "✅ CMake found" || echo "❌ CMake missing"
-        
-        echo "--- javac ---"
-        which javac && echo "✅ Java compiler found" || echo "❌ Java compiler missing"
-        
-        # Create android directory
-        mkdir -p android
-        cp buildozer.spec android/
-        cp *.py android/ 2>/dev/null || echo "📁 No Python files to copy"
-        
-        echo "Android directory setup complete:"
-        ls -la android/
-        
-        # Final build attempt
-        cd android
-        echo "🚀 Starting FINAL BUILD with complete verification..."
-        echo "================================================"
-        
-        # Try buildozer with multiple fallback strategies
-        echo "Attempt 1: Verbose build..."
-        if buildozer android debug --verbose; then
-          echo "🎉 SUCCESS with verbose build!"
-        else
-          echo "⚠️ Verbose failed, trying standard build..."
-          echo "Attempt 2: Standard build..."
-          if buildozer android debug; then
-            echo "🎉 SUCCESS with standard build!"
-          else
-            echo "⚠️ Standard failed, trying with cleanup..."
-            echo "Attempt 3: Clean and rebuild..."
-            buildozer android clean
-            if buildozer android debug; then
-              echo "🎉 SUCCESS with clean rebuild!"
-            else
-              echo "❌ All build attempts failed"
-              echo "🔍 Last resort: Check buildozer logs..."
-              if [ -f "buildozer.log" ]; then
-                echo "--- Last 50 lines of buildozer.log ---"
-                tail -50 buildozer.log
-              else
-                echo "No buildozer.log found"
-              fi
-              exit 1
-            fi
-          fi
+        if [ -f "build.log" ]; then
+            echo "=== build.log ==="
+            tail -50 build.log
         fi
-        
-        # Comprehensive APK search and verification
-        echo "🔍 Comprehensive APK search..."
-        echo "=== Searching for APK files ==="
-        
-        APK_FOUND=false
-        
-        # Search in common locations
-        for pattern in "bin/*.apk" "app/build/outputs/apk/debug/*.apk" "*.apk"; do
-          echo "Searching pattern: $pattern"
-          if find . -path "$pattern" -type f 2>/dev/null | head -1 | while read apk; do
-            echo "✅ Found APK: $apk"
-            ls -la "$apk"
-            APK_FOUND=true
-          done; then
-            break
-          fi
-        done
-        
-        if [ "$APK_FOUND" = false ]; then
-          echo "ℹ️ No APK found, listing all files..."
-          find . -name "*.apk" -type f
-          
-          echo "--- Searching for any .apk files recursively ---"
-          find . -name "*.apk" -type f || echo "❌ No .apk files found anywhere"
-        fi
-        
-        # List APK location if found
-        if [ -f "bin/supermarket-1.0.0-debug.apk" ]; then
-          echo "🎉 FINAL SUCCESS!"
-          echo "APK ready at: bin/supermarket-1.0.0-debug.apk"
-          ls -la bin/supermarket-1.0.0-debug.apk
-        elif find . -name "*.apk" -type f | head -1 | while read apk; do
-          echo "🎉 SUCCESS with alternative APK:"
-          echo "Found: $apk"
-          ls -la "$apk"
-        done; then
-          echo "🎉 APK build completed successfully!"
-        else
-          echo "ℹ️ APK search completed but location unclear"
-        fi
-    
-    - name: Upload APK artifact
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: supermarket-android-apk
-        path: |
-          android/bin/*.apk
-          android/app/build/outputs/apk/debug/*.apk
-          android/*.apk
-          *.apk
-        retention-days: 7
+        exit 1
+    fi
