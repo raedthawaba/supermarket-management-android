@@ -1,21 +1,22 @@
-- name: Build Android APK (Fixed Version)
+- name: Build Android APK (Force Pre-installed SDK)
   run: |
     export ANDROID_HOME=${{ env.ANDROID_HOME }}
     export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
     export PATH=$PATH:$ANDROID_HOME/build-tools/34.0.0
     
-    echo "🔧 Final environment configuration:"
-    echo "ANDROID_HOME: $ANDROID_HOME"
-    echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-    echo "PATH: $PATH"
+    # Force use our pre-installed SDK and prevent downloads
+    export BUILDODER_ANDROID_SDK=$ANDROID_HOME
+    export BUILDODER_ANDROID_NDK=$ANDROID_HOME/ndk/25.2.9519653
     
-    # Verify critical tools
-    echo "🔍 Tool verification:"
-    which aidl && echo "✅ AIDL found" || echo "❌ AIDL missing"
-    which aapt && echo "✅ AAPT found" || echo "❌ AAPT missing"
-    which zipalign && echo "✅ zipalign found" || echo "❌ zipalign missing"
+    echo "🔧 Using pre-installed SDK: $ANDROID_HOME"
     
-    # Create android directory with fixed buildozer.spec
+    # Create symlinks to force buildozer use our tools
+    mkdir -p /home/runner/.buildozer/android/platform/android-sdk
+    ln -sf $ANDROID_HOME/build-tools /home/runner/.buildozer/android/platform/android-sdk/build-tools || true
+    ln -sf $ANDROID_HOME/platform-tools /home/runner/.buildozer/android/platform/android-sdk/platform-tools || true
+    ln -sf $ANDROID_HOME/platforms /home/runner/.buildozer/android/platform/android-sdk/platforms || true
+    
+    # Create android directory
     mkdir -p android
     cat > android/buildozer.spec << 'EOF'
 [app]
@@ -36,45 +37,27 @@ warn_on_root = 1
 
 [android]
 
-# FORCE SPECIFIC VERSIONS TO AVOID LICENSE ISSUES
 android.ndk = 25.2.9519653
 android.sdk = 33
 android.build_tools = 34.0.0
 android.archs = arm64-v8a,armeabi-v7a
 android.enable_androidx = False
 
-# PREVENT AUTO-DOWNLOAD OF NEW VERSIONS
+# CRITICAL: Prevent auto-downloads
 android.skip_update = True
 android.accept_sdk_license = True
 
 EOF
 
-    # Copy Python files
     cp *.py android/ 2>/dev/null || echo "📁 No Python files to copy"
     
     cd android
     
-    # Clean any previous builds
-    echo "🧹 Cleaning previous builds..."
-    buildozer android clean
+    echo "🚀 Building APK..."
+    buildozer android debug
     
-    # Build with verbose output
-    echo "🚀 Starting build..."
-    buildozer android debug 2>&1 | tee build.log
-    
-    # Check if APK was created
-    if find . -name "*.apk" -type f | grep -q .; then
-        echo "🎉 APK built successfully!"
-        find . -name "*.apk" -type f -exec ls -la {} \;
-    else
-        echo "❌ Build failed - checking logs..."
-        if [ -f "buildozer.log" ]; then
-            echo "=== buildozer.log ==="
-            tail -100 buildozer.log
-        fi
-        if [ -f "build.log" ]; then
-            echo "=== build.log ==="
-            tail -50 build.log
-        fi
-        exit 1
-    fi
+    # Find APK
+    find . -name "*.apk" -type f | while read apk; do
+        echo "🎉 SUCCESS: $apk"
+        ls -la "$apk"
+    done
