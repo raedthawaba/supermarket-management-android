@@ -40,7 +40,7 @@ jobs:
         cd android-sdk
         
         # Download command line tools
-        echo "📦 Downloading Android SDK command line tools..."
+        echo "ًں“¦ Downloading Android SDK command line tools..."
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
         unzip -q commandlinetools-linux-11076708_latest.zip
         mkdir -p cmdline-tools/latest
@@ -53,48 +53,48 @@ jobs:
         echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
         
         # CRITICAL: COMPREHENSIVE LICENSE ACCEPTANCE for ALL packages
-        echo "🔑 ACCEPTING ALL ANDROID SDK LICENSES (COMPREHENSIVE)..."
+        echo "ًں”‘ ACCEPTING ALL ANDROID SDK LICENSES (COMPREHENSIVE)..."
         (
           # Accept all possible licenses for all packages
           for i in {1..30}; do
             echo "y"
           done
         ) | sdkmanager --sdk_root=$PWD --licenses
-        echo "✅ Comprehensive license acceptance completed"
+        echo "âœ… Comprehensive license acceptance completed"
         
         # Force accept all licenses explicitly
-        echo "🔑 FORCE ACCEPTING ALL LICENSES..."
+        echo "ًں”‘ FORCE ACCEPTING ALL LICENSES..."
         yes | sdkmanager --sdk_root=$PWD --licenses
-        echo "✅ Force license acceptance completed"
+        echo "âœ… Force license acceptance completed"
         
         # Update SDK repository first
-        echo "📈 Updating SDK repository..."
+        echo "ًں“ˆ Updating SDK repository..."
         sdkmanager --sdk_root=$PWD --update
         
         # Install build-tools with different approaches
-        echo "🛠️ Installing build-tools with multiple fallback methods..."
+        echo "ًں› ï¸ڈ Installing build-tools with multiple fallback methods..."
         
         # Method 1: Try specific stable versions
-        echo "🔸 Installing build-tools;35.0.0..."
+        echo "ًں”¸ Installing build-tools;35.0.0..."
         (
           yes | sdkmanager --sdk_root=$PWD --licenses && \
           sdkmanager --sdk_root=$PWD "build-tools;35.0.0"
-        ) && echo "✅ build-tools;35.0.0 installed" || {
-          echo "❌ build-tools;35.0.0 failed, trying next..."
+        ) && echo "âœ… build-tools;35.0.0 installed" || {
+          echo "â‌Œ build-tools;35.0.0 failed, trying next..."
           
-          echo "🔸 Installing build-tools;34.0.0..."
+          echo "ًں”¸ Installing build-tools;34.0.0..."
           (
             yes | sdkmanager --sdk_root=$PWD --licenses && \
             sdkmanager --sdk_root=$PWD "build-tools;34.0.0"
-          ) && echo "✅ build-tools;34.0.0 installed" || {
-            echo "❌ build-tools;34.0.0 failed, trying latest..."
+          ) && echo "âœ… build-tools;34.0.0 installed" || {
+            echo "â‌Œ build-tools;34.0.0 failed, trying latest..."
             
-            echo "🔸 Installing latest build-tools..."
+            echo "ًں”¸ Installing latest build-tools..."
             (
               yes | sdkmanager --sdk_root=$PWD --licenses && \
               sdkmanager --sdk_root=$PWD "build-tools"
-            ) && echo "✅ Latest build-tools installed" || {
-              echo "❌ All build-tools methods failed, using buildozer..."
+            ) && echo "âœ… Latest build-tools installed" || {
+              echo "â‌Œ All build-tools methods failed, using buildozer..."
               
               # Use buildozer as fallback
               cd /tmp
@@ -104,14 +104,14 @@ jobs:
               # Copy from buildozer if available
               if [ -d "/home/runner/.buildozer/android/platform/android-sdk/build-tools" ]; then
                 cp -r /home/runner/.buildozer/android/platform/android-sdk/build-tools $ANDROID_HOME/
-                echo "✅ Copied build-tools from buildozer"
+                echo "âœ… Copied build-tools from buildozer"
               fi
             }
           }
         }
         
         # Install core packages with comprehensive licensing
-        echo "📱 Installing core packages with ALL LICENSES ACCEPTED..."
+        echo "ًں“± Installing core packages with ALL LICENSES ACCEPTED..."
         
         # Install each package individually with license acceptance
         echo "Installing platform-tools..."
@@ -134,47 +134,47 @@ jobs:
         
         # Alternative CMake installation if first fails
         if ! sdkmanager --sdk_root=$PWD --list_installed | grep -q "cmake"; then
-          echo "🔄 CMake installation failed, trying alternative..."
+          echo "ًں”„ CMake installation failed, trying alternative..."
           yes | sdkmanager --sdk_root=$PWD --licenses && \
           sdkmanager --sdk_root=$PWD "cmake;3.22.1" --force || \
-          echo "⚠️ CMake installation completely failed"
+          echo "âڑ ï¸ڈ CMake installation completely failed"
         fi
         
         # Verify all installations
-        echo "🔍 Verifying installation..."
+        echo "ًں”چ Verifying installation..."
         sdkmanager --sdk_root=$PWD --list_installed | grep -E "(build-tools|platform-tools|platforms|cmake|ndk)"
         
         # Check build-tools if installed
         if [ -d "$ANDROID_HOME/build-tools" ]; then
-          echo "✅ build-tools directory found!"
+          echo "âœ… build-tools directory found!"
           ls -la $ANDROID_HOME/build-tools/
           
           # Add all build-tools to PATH
           for dir in $ANDROID_HOME/build-tools/*/; do
             if [ -d "$dir" ]; then
               version=$(basename "$dir")
-              echo "📁 Found build-tools version: $version"
+              echo "ًں“پ Found build-tools version: $version"
               
               # Check for critical tools
               if [ -f "$dir/aidl" ]; then
-                echo "✅ AIDL found in $version"
+                echo "âœ… AIDL found in $version"
                 export PATH=$PATH:$dir
               fi
               if [ -f "$dir/zipalign" ]; then
-                echo "✅ zipalign found in $version"
+                echo "âœ… zipalign found in $version"
               fi
               if [ -f "$dir/aapt" ] || [ -f "$dir/aapt2" ]; then
-                echo "✅ AAPT found in $version"
+                echo "âœ… AAPT found in $version"
               fi
             fi
           done
           
           echo "PATH=$PATH" >> $GITHUB_ENV
         else
-          echo "⚠️ No build-tools directory found"
+          echo "âڑ ï¸ڈ No build-tools directory found"
           
           # Create fallback structure
-          echo "🔧 Creating fallback build-tools structure..."
+          echo "ًں”§ Creating fallback build-tools structure..."
           mkdir -p $ANDROID_HOME/build-tools/33.0.2
           
           # Try to copy aidl from system
@@ -182,14 +182,14 @@ jobs:
           if [ -n "$SYSTEM_AIDL" ] && [ -f "$SYSTEM_AIDL" ]; then
             cp "$SYSTEM_AIDL" $ANDROID_HOME/build-tools/33.0.2/
             chmod +x $ANDROID_HOME/build-tools/33.0.2/aidl
-            echo "✅ System aidl copied to build-tools"
+            echo "âœ… System aidl copied to build-tools"
             export PATH=$PATH:$ANDROID_HOME/build-tools/33.0.2
           fi
           
           echo "PATH=$PATH" >> $GITHUB_ENV
         fi
         
-        echo "📊 Final installation summary:"
+        echo "ًں“ٹ Final installation summary:"
         echo "ANDROID_HOME: $ANDROID_HOME"
         echo "PATH: $PATH"
         echo "Installed packages:"
@@ -221,7 +221,7 @@ jobs:
         cat > buildozer.spec << 'EOF'
         [app]
         
-        title = نظام السوبر ماركت
+        title = ظ†ط¸ط§ظ… ط§ظ„ط³ظˆط¨ط± ظ…ط§ط±ظƒطھ
         package.name = supermarket
         package.domain = com.supermarket
         source.dir = .
@@ -249,59 +249,59 @@ jobs:
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
         export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
         
-        echo "🔧 Final environment configuration:"
+        echo "ًں”§ Final environment configuration:"
         echo "ANDROID_HOME: $ANDROID_HOME"
         echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
         echo "PATH: $PATH"
         
         # Verify all critical tools
-        echo "🔍 Comprehensive tool verification:"
+        echo "ًں”چ Comprehensive tool verification:"
         echo "--- AIDL ---"
-        which aidl && echo "✅ AIDL found" || echo "❌ AIDL missing"
+        which aidl && echo "âœ… AIDL found" || echo "â‌Œ AIDL missing"
         
         echo "--- zipalign ---"
-        which zipalign && echo "✅ zipalign found" || echo "❌ zipalign missing"
+        which zipalign && echo "âœ… zipalign found" || echo "â‌Œ zipalign missing"
         
         echo "--- aapt ---"
-        which aapt && echo "✅ AAPT found" || echo "❌ AAPT missing"
+        which aapt && echo "âœ… AAPT found" || echo "â‌Œ AAPT missing"
         
         echo "--- CMake ---"
-        which cmake && echo "✅ CMake found" || echo "❌ CMake missing"
+        which cmake && echo "âœ… CMake found" || echo "â‌Œ CMake missing"
         
         echo "--- javac ---"
-        which javac && echo "✅ Java compiler found" || echo "❌ Java compiler missing"
+        which javac && echo "âœ… Java compiler found" || echo "â‌Œ Java compiler missing"
         
         # Create android directory
         mkdir -p android
         cp buildozer.spec android/
-        cp *.py android/ 2>/dev/null || echo "📝 No Python files to copy"
+        cp *.py android/ 2>/dev/null || echo "ًں“‌ No Python files to copy"
         
         echo "Android directory setup complete:"
         ls -la android/
         
         # Final build attempt
         cd android
-        echo "🚀 Starting FINAL BUILD with complete verification..."
+        echo "ًںڑ€ Starting FINAL BUILD with complete verification..."
         echo "================================================"
         
         # Try buildozer with multiple fallback strategies
         echo "Attempt 1: Verbose build..."
         if buildozer android debug --verbose; then
-          echo "🎉 SUCCESS with verbose build!"
+          echo "ًںژ‰ SUCCESS with verbose build!"
         else
-          echo "🔄 Verbose failed, trying standard build..."
+          echo "ًں”„ Verbose failed, trying standard build..."
           echo "Attempt 2: Standard build..."
           if buildozer android debug; then
-            echo "🎉 SUCCESS with standard build!"
+            echo "ًںژ‰ SUCCESS with standard build!"
           else
-            echo "🔄 Standard failed, trying with cleanup..."
+            echo "ًں”„ Standard failed, trying with cleanup..."
             echo "Attempt 3: Clean and rebuild..."
             buildozer android clean
             if buildozer android debug; then
-              echo "🎉 SUCCESS with clean rebuild!"
+              echo "ًںژ‰ SUCCESS with clean rebuild!"
             else
-              echo "❌ All build attempts failed"
-              echo "🔍 Last resort: Check buildozer logs..."
+              echo "â‌Œ All build attempts failed"
+              echo "ًں”چ Last resort: Check buildozer logs..."
               if [ -f "buildozer.log" ]; then
                 echo "--- Last 50 lines of buildozer.log ---"
                 tail -50 buildozer.log
@@ -314,7 +314,7 @@ jobs:
         fi
         
         # Comprehensive APK search and verification
-        echo "🔍 Comprehensive APK search..."
+        echo "ًں”چ Comprehensive APK search..."
         echo "=== Searching for APK files ==="
         
         APK_FOUND=false
@@ -323,7 +323,7 @@ jobs:
         for pattern in "bin/*.apk" "app/build/outputs/apk/debug/*.apk" "*.apk"; do
           echo "Searching pattern: $pattern"
           if find . -path "$pattern" -type f 2>/dev/null | head -1 | while read apk; do
-            echo "✅ Found APK: $apk"
+            echo "âœ… Found APK: $apk"
             ls -la "$apk"
             APK_FOUND=true
           done; then
@@ -332,26 +332,26 @@ jobs:
         done
         
         if [ "$APK_FOUND" = false ]; then
-          echo "⚠️ No APK found, listing all files..."
+          echo "âڑ ï¸ڈ No APK found, listing all files..."
           find . -name "*.apk" -type f
           
           echo "--- Searching for any .apk files recursively ---"
-          find . -name "*.apk" -type f || echo "❌ No .apk files found anywhere"
+          find . -name "*.apk" -type f || echo "â‌Œ No .apk files found anywhere"
         fi
         
         # List APK location if found
         if [ -f "bin/supermarket-1.0.0-debug.apk" ]; then
-          echo "🎉 FINAL SUCCESS!"
+          echo "ًںژ‰ FINAL SUCCESS!"
           echo "APK ready at: bin/supermarket-1.0.0-debug.apk"
           ls -la bin/supermarket-1.0.0-debug.apk
         elif find . -name "*.apk" -type f | head -1 | while read apk; do
-          echo "🎉 SUCCESS with alternative APK:"
+          echo "ًںژ‰ SUCCESS with alternative APK:"
           echo "Found: $apk"
           ls -la "$apk"
         done; then
-          echo "🎉 APK build completed successfully!"
+          echo "ًںژ‰ APK build completed successfully!"
         else
-          echo "⚠️ APK search completed but location unclear"
+          echo "âڑ ï¸ڈ APK search completed but location unclear"
         fi
     
     - name: Upload APK artifact
