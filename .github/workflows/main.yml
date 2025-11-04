@@ -33,7 +33,7 @@ jobs:
         java -version
         javac -version
     
-    - name: Install Android SDK (Simple Direct Method)
+    - name: Install Android SDK (Package-Fixed Method)
       run: |
         # Create SDK directory
         mkdir -p android-sdk
@@ -53,22 +53,63 @@ jobs:
         echo "ANDROID_SDK_ROOT=$PWD" >> $GITHUB_ENV
         echo "PATH=$PATH" >> $GITHUB_ENV
         
-        # Accept all licenses in the most direct way possible
+        # Accept all licenses
         echo "y" | yes | sdkmanager --sdk_root=$PWD --licenses || true
         
-        # Update SDK
-        sdkmanager --sdk_root=$PWD --update
+        # Update SDK first
+        echo "Updating SDK repository..."
+        sdkmanager --sdk_root=$PWD --update --sdk_root=$PWD
         
-        # Install exactly what buildozer will need
+        # List available packages to see what we can install
+        echo "Available build-tools packages:"
+        sdkmanager --sdk_root=$PWD --list | grep "build-tools"
+        
+        # Try different build-tools installation approaches
+        echo "Installing build-tools with fallback approach..."
+        
+        # Method 1: Try with specific version
+        sdkmanager --sdk_root=$PWD "build-tools;36.1.0" || \
+        # Method 2: Try without version (latest)
+        sdkmanager --sdk_root=$PWD "build-tools" || \
+        # Method 3: Try specific known working versions
+        sdkmanager --sdk_root=$PWD "build-tools;35.0.0" || \
+        sdkmanager --sdk_root=$PWD "build-tools;34.0.0" || \
+        sdkmanager --sdk_root=$PWD "build-tools;33.0.2" || \
+        echo "⚠️  All build-tools installation methods failed"
+        
+        # Always install these core packages that we know work
+        echo "Installing core Android packages..."
         sdkmanager --sdk_root=$PWD "platform-tools"
         sdkmanager --sdk_root=$PWD "platforms;android-33"
-        sdkmanager --sdk_root=$PWD "build-tools"  # Install latest build-tools
         sdkmanager --sdk_root=$PWD "system-images;android-33;google_apis;x86_64"
         sdkmanager --sdk_root=$PWD "ndk;26.2.11394342"
         sdkmanager --sdk_root=$PWD "cmake;3.22.1"
         
         # Check what was actually installed
+        echo "Verifying installation..."
         sdkmanager --sdk_root=$PWD --list_installed
+        
+        # Check if any build-tools was installed
+        if [ -d "$ANDROID_HOME/build-tools" ]; then
+          echo "✅ build-tools directory found!"
+          ls -la $ANDROID_HOME/build-tools/
+          
+          # Add all build-tools to PATH
+          for dir in $ANDROID_HOME/build-tools/*/; do
+            if [ -d "$dir" ]; then
+              version=$(basename "$dir")
+              echo "Found build-tools version: $version"
+              
+              # Check for AIDL
+              if [ -f "$dir/aidl" ]; then
+                echo "✅ AIDL found in build-tools;$version"
+              fi
+            fi
+          done
+        else
+          echo "⚠️  No build-tools directory found"
+          echo "This might still work if buildozer handles it differently"
+        fi
     
     - name: Install system dependencies (Ubuntu 24.04 Compatible)
       run: |
@@ -119,18 +160,20 @@ jobs:
         
         EOF
     
-    - name: Build Android APK (Let Android SDK Handle It)
+    - name: Build Android APK (Buildozer-Managed)
       run: |
         export ANDROID_HOME=${{ env.ANDROID_HOME }}
         export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
         
-        # Add all build-tools to PATH
-        for dir in $ANDROID_HOME/build-tools/*/; do
-          if [ -d "$dir" ]; then
-            echo "Adding to PATH: $dir"
-            export PATH=$PATH:$dir
-          fi
-        done
+        # Set up PATH for all build-tools
+        if [ -d "$ANDROID_HOME/build-tools" ]; then
+          for dir in $ANDROID_HOME/build-tools/*/; do
+            if [ -d "$dir" ]; then
+              echo "Adding to PATH: $dir"
+              export PATH=$PATH:$dir
+            fi
+          done
+        fi
         
         echo "Final PATH: $PATH"
         
@@ -139,6 +182,15 @@ jobs:
         cp buildozer.spec android/
         cp *.py android/ 2>/dev/null || echo "No Python files found"
         
-        # Let buildozer handle everything
+        echo "Android directory contents:"
+        ls -la android/
+        
+        # Let buildozer handle everything - it might download build-tools itself
         cd android
-        buildozer android debug
+        echo "🚀 Starting buildozer build..."
+        buildozer android debug --verbose || {
+          echo "❌ Buildozer failed, trying simpler approach..."
+          buildozer android debug
+        }
+        
+        echo "✅ Build process completed"
