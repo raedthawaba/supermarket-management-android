@@ -1,63 +1,26 @@
-- name: Build Android APK (Force Pre-installed SDK)
+name: Minimal Android Build
+on: push: branches: [ main ]
+jobs: build: runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+- name: Setup Python
+  uses: actions/setup-python@v4 with: python-version: '3.12'
+- name: Install buildozer
   run: |
-    export ANDROID_HOME=${{ env.ANDROID_HOME }}
-    export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
-    export PATH=$PATH:$ANDROID_HOME/build-tools/34.0.0
-    
-    # Force use our pre-installed SDK and prevent downloads
-    export BUILDODER_ANDROID_SDK=$ANDROID_HOME
-    export BUILDODER_ANDROID_NDK=$ANDROID_HOME/ndk/25.2.9519653
-    
-    echo "🔧 Using pre-installed SDK: $ANDROID_HOME"
-    
-    # Create symlinks to force buildozer use our tools
-    mkdir -p /home/runner/.buildozer/android/platform/android-sdk
-    ln -sf $ANDROID_HOME/build-tools /home/runner/.buildozer/android/platform/android-sdk/build-tools || true
-    ln -sf $ANDROID_HOME/platform-tools /home/runner/.buildozer/android/platform/android-sdk/platform-tools || true
-    ln -sf $ANDROID_HOME/platforms /home/runner/.buildozer/android/platform/android-sdk/platforms || true
-    
-    # Create android directory
-    mkdir -p android
-    cat > android/buildozer.spec << 'EOF'
-[app]
-
-title = نظام السوبر ماركت
+    sudo apt-get update
+    sudo apt-get install -y openjdk-17-jdk
+    pip install buildozer
+- name: Simple build
+  run: |
+    echo "[app]
+title =超市应用
 package.name = supermarket
 package.domain = com.supermarket
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,wav,ttf
 version = 1.0.0
-requirements = python3,kivy==2.3.1,kivymd==1.2.0,pillow,sqlite3
-orientation = portrait
-
-[buildozer]
-
-log_level = 2
-warn_on_root = 1
-
-[android]
-
-android.ndk = 25.2.9519653
-android.sdk = 33
-android.build_tools = 34.0.0
-android.archs = arm64-v8a,armeabi-v7a
-android.enable_androidx = False
-
-# CRITICAL: Prevent auto-downloads
-android.skip_update = True
-android.accept_sdk_license = True
-
-EOF
-
-    cp *.py android/ 2>/dev/null || echo "📁 No Python files to copy"
-    
-    cd android
-    
-    echo "🚀 Building APK..."
+requirements = python3,kivy" > buildozer.spec
     buildozer android debug
-    
-    # Find APK
-    find . -name "*.apk" -type f | while read apk; do
-        echo "🎉 SUCCESS: $apk"
-        ls -la "$apk"
-    done
+- name: Upload APK
+  if: always()
+  uses: actions/upload-artifact@v4
+  with: name: apk path: "**/*.apk"
